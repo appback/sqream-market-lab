@@ -2,13 +2,25 @@
 
 Current operating layout:
 
-| Worker | Service | Purpose |
-| --- | --- | --- |
-| sqream1 | ingest | Parquet staging load |
-| sqream2 | ingest | Parquet staging load |
-| sqream3 | analysis | latest rebuild, market regime, strategy SQL |
-| sqream4 | analysis | latest rebuild, market regime, strategy SQL |
-| sqream5 | sqream | runtime detection and paper-trading state SQL |
+| Worker | Service | cudaMemQuota | Purpose |
+| --- | --- | ---: | --- |
+| sqream1 | ingest | 20 | Parquet staging load |
+| sqream2 | ingest | 20 | Parquet staging load |
+| sqream3 | analysis | 25 | latest rebuild, market regime, strategy SQL |
+| sqream4 | analysis | 25 | latest rebuild, market regime, strategy SQL |
+| sqream5 | sqream | 10 | runtime detection and paper-trading state SQL |
+
+
+## Quota Policy
+
+The worker split is `2 ingest / 2 analysis / 1 sqream`.
+GPU quota is not equal-weighted because runtime detection is lightweight and analysis queries are heavier than raw Parquet loads.
+
+Current quota target:
+
+- ingest group: 40% total (`20 + 20`)
+- analysis group: 50% total (`25 + 25`)
+- detection/runtime group: 10% total (`10`)
 
 ## Rationale
 
