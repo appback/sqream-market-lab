@@ -1,0 +1,29 @@
+# Runtime and generated data
+staging/
+output/
+logs/
+state/
+__pycache__/
+*.py[cod]
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*token*
+*secret*
+
+# Large market data artifacts
+*.parquet
+*.orc
+*.csv
+!sample_prices/*.csv
+
+# Temporary/build artifacts
+.agents/
+.codex/
+tmp/
+*.tmp
+*.log

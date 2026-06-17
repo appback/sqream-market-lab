@@ -1,0 +1,122 @@
+[
+  {
+    "version": "surge_pullback_v1",
+    "strategy_name": "surge_pullback_35_target25_stop15_eod",
+    "type": "surge_pullback",
+    "status": "active_paper",
+    "rule_summary": "intraday +100% surge, enter 35% pullback, target +25%, stop -15%, EOD close",
+    "decision": "keep paper-only while collecting samples"
+  },
+  {
+    "version": "d1_precursor_v1",
+    "strategy_name": "d1_vol5_absret10_breakout_2_target10_stop5_eod",
+    "type": "precursor_breakout",
+    "status": "superseded",
+    "rule_summary": "prior-day volume >= 5x 20d average and abs return <= 10%, entry +2%, target +10%, stop -5%",
+    "decision": "superseded by d1_precursor_v1_1 after ledger showed edge concentrated in opening bucket"
+  },
+  {
+    "version": "d1_precursor_v1_1",
+    "strategy_name": "d1_vol5_absret10_breakout_2_target10_stop5_eod",
+    "type": "precursor_breakout",
+    "status": "active_paper",
+    "rule_summary": "same D1 precursor, but enabled only in opening_0930_1015; disabled after 10:15; size multiplier 0.30",
+    "latest_result": {
+      "test": "paper_trade_ledger_time_bucket",
+      "total_trades": 19,
+      "total_wins": 9,
+      "total_losses": 10,
+      "total_avg_pnl_pct": 2.4197527836613952,
+      "opening_trades": 10,
+      "opening_wins": 8,
+      "opening_losses": 2,
+      "opening_avg_pnl_pct": 7.597530288956655,
+      "example_win": "CTM 2026-06-16 +10.00pct target"
+    },
+    "decision": "active paper only in opening bucket; collect more out-of-sample days"
+  },
+  {
+    "version": "sideways_vwap_v1",
+    "strategy_name": "sideways_vwap_reversion_3_target_stop_cost",
+    "type": "mean_reversion",
+    "status": "disabled",
+    "rule_summary": "sideways lower range VWAP reversion, target +3%, stop around -2%, cost 0.5%, fill cushion 0.5%",
+    "latest_result": {
+      "test": "live_safe_backtest",
+      "trades": 1080,
+      "wins": 323,
+      "losses": 757,
+      "avg_pnl_pct": -0.7476401886500262,
+      "total_pnl_pct": -807.4514037420283
+    },
+    "decision": "disabled until stricter filter is found"
+  },
+  {
+    "version": "uptrend_breakout_v0_1",
+    "strategy_name": "uptrend_breakout_t3_stop15_cost",
+    "type": "breakout",
+    "status": "superseded",
+    "rule_summary": "uptrend, 10:15-14:30, close breaks previous running high by 0.2%, target +3%, stop -1.5%, cost 0.5%",
+    "latest_result": {
+      "test": "strategy_lab_exit_grid",
+      "trades": 276,
+      "wins": 146,
+      "losses": 130,
+      "avg_pnl_pct": 0.0907806557744153,
+      "total_pnl_pct": 25.05546099373862
+    },
+    "decision": "superseded by uptrend_breakout_v0_2"
+  },
+  {
+    "version": "uptrend_breakout_v0_2",
+    "strategy_name": "uptrend_breakout_b05_vol2m_rs15_breadth60_t4_stop2_cost",
+    "type": "breakout",
+    "status": "candidate",
+    "rule_summary": "uptrend, breadth >= 60%, close breaks previous running high by 0.5%, run volume >= 2M, relative strength >= +1.5%p, target +4%, stop -2%, cost 0.5%",
+    "latest_result": {
+      "test": "breakout_candidate_grid",
+      "trades": 50,
+      "wins": 33,
+      "losses": 17,
+      "avg_pnl_pct": 0.3587436049139791,
+      "total_pnl_pct": 17.937180245698954
+    },
+    "decision": "best current candidate; keep lab-only until more days confirm"
+  },
+  {
+    "version": "uptrend_high_hold_v0_1",
+    "strategy_name": "uptrend_high_hold_t3_stop15_cost",
+    "type": "high_hold",
+    "status": "disabled",
+    "latest_result": {
+      "test": "strategy_lab_exit_grid",
+      "trades": 1167,
+      "avg_pnl_pct": -0.43056745263402624
+    },
+    "decision": "disabled"
+  },
+  {
+    "version": "uptrend_vwap_pullback_v0_1",
+    "strategy_name": "uptrend_vwap_pullback_t2_stop1_cost",
+    "type": "trend_pullback",
+    "status": "disabled",
+    "latest_result": {
+      "test": "strategy_lab_live_safe",
+      "trades": 452,
+      "avg_pnl_pct": -0.8558647806831474
+    },
+    "decision": "disabled"
+  },
+  {
+    "version": "mr_lower10_v0_1",
+    "strategy_name": "mr_lower10_t1_stop1_cost",
+    "type": "mean_reversion",
+    "status": "disabled",
+    "latest_result": {
+      "test": "strategy_lab_live_safe",
+      "trades": 634,
+      "avg_pnl_pct": -0.7477938609054461
+    },
+    "decision": "disabled"
+  }
+]
