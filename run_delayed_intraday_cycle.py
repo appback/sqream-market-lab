@@ -6,7 +6,6 @@ import argparse
 import fcntl
 import json
 import os
-import subprocess
 import tempfile
 import time
 from datetime import datetime
@@ -16,6 +15,7 @@ from zoneinfo import ZoneInfo
 import paramiko
 
 from collect_delayed_intraday_bars import collect, load_symbols, write_parquet
+from report_notifier import notify
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,10 +31,7 @@ SQREAM_PASSWORD = "sqream"
 SQREAM_SERVICE = os.environ.get("SQREAM_SERVICE", "sqream")
 SQREAM_BIN = "/SQREAM/sqream-db-v4.4.0/bin/sqream"
 REMOTE_STAGE_DIR = "/data/cluster/sqream_stage"
-OUTBOX = LOG_DIR / "telegram_report_outbox.jsonl"
 SQREAM_DDL_LOCK = "/tmp/sqream_ddl_analysis.lock"
-REMOTEAGENT_REPORT_BIN = "/home/ospadmin/.remoteagent/app/remoteagent-src/dist/report-telegram.js"
-REMOTEAGENT_PUBLIC_SESSION_ID = "S002"
 
 
 def sql_str(value: str) -> str:
@@ -83,34 +80,26 @@ def run_sqream_sql(sql: str, *, check: bool = True) -> str:
 
 
 def record_report(event_type: str, text: str) -> None:
-    LOG_DIR.mkdir(exist_ok=True)
-    created_at = datetime.now(NY_TZ).isoformat()
-    with OUTBOX.open("a") as f:
-        f.write(json.dumps({"created_at": created_at, "event_type": event_type, "text": text}, ensure_ascii=False) + "\n")
-    run_sqream_sql("create schema market_rt;", check=False)
-    exists = run_sqream_sql("select count(*) from market_rt.report_events;", check=False)
-    if not exists.strip():
-        run_sqream_sql(
-            """
+    def persist_report_event(created_at: str, persisted_event_type: str, persisted_text: str) -> None:
+        run_sqream_sql("create schema market_rt;", check=False)
+        exists = run_sqream_sql("select count(*) from market_rt.report_events;", check=False)
+        if not exists.strip():
+            run_sqream_sql(
+                """
 create table market_rt.report_events (
   created_at text(32),
   event_type text(32),
   message text(512)
 );
 """
-        )
-    run_sqream_sql(
-        "insert into market_rt.report_events values ("
-        f"{sql_str(created_at)}, {sql_str(event_type)}, {sql_str(text)});",
-        check=False,
-    )
-    if Path(REMOTEAGENT_REPORT_BIN).exists():
-        subprocess.run(
-            ["node", REMOTEAGENT_REPORT_BIN, "--session", REMOTEAGENT_PUBLIC_SESSION_ID, text],
-            capture_output=True,
-            text=True,
+            )
+        run_sqream_sql(
+            "insert into market_rt.report_events values ("
+            f"{sql_str(created_at)}, {sql_str(persisted_event_type)}, {sql_str(persisted_text)});",
             check=False,
         )
+
+    notify(event_type, text, persist_report=persist_report_event, print_text=False)
 
 
 def ensure_table_exists(table_name: str, ddl: str) -> None:
@@ -362,4 +351,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        record_report(
+            "장중 에러",
+            f"[장중 에러] context=run_delayed_intraday_cycle error={str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__}",
+        )
+        raise

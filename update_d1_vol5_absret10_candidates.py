@@ -13,6 +13,7 @@ import pandas as pd
 import yfinance as yf
 
 from collect_delayed_intraday_bars import batched, load_symbols
+from report_notifier import notify_error
 from sqream_runtime_events import report, run_sqream_sql, sql_str
 
 
@@ -162,4 +163,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        notify_error("update_d1_vol5_absret10_candidates", exc)
+        raise

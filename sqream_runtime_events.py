@@ -5,23 +5,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from report_notifier import notify, notify_error
+
 
 BASE_DIR = Path(__file__).resolve().parent
 STATE_DIR = BASE_DIR / "state"
 LOG_DIR = BASE_DIR / "logs"
-OUTBOX = LOG_DIR / "telegram_report_outbox.jsonl"
 STATE_PATH = STATE_DIR / "runtime_state.json"
 TRADE_LEDGER_PATH = STATE_DIR / "paper_trade_ledger.jsonl"
 NY_TZ = ZoneInfo("America/New_York")
-REMOTEAGENT_REPORT_BIN = "/home/ospadmin/.remoteagent/app/remoteagent-src/dist/report-telegram.js"
-REMOTEAGENT_PUBLIC_SESSION_ID = "S002"
 ALGORITHM_NAME = "surge_pullback_35_target25_stop15_eod"
 D1_ALGORITHM_NAME = "d1_vol5_absret10_breakout_2_target10_stop5_eod"
 SIDEWAYS_ALGORITHM_NAME = "sideways_vwap_reversion_3_target_stop_cost"
@@ -298,27 +296,15 @@ def position_symbol(key: str, position: dict) -> str:
     return key
 
 
-def report(event_type: str, text: str, payload: dict | None = None) -> None:
-    LOG_DIR.mkdir(exist_ok=True)
-    row = {
-        "created_at": datetime.now(NY_TZ).isoformat(),
-        "event_type": event_type,
-        "text": text,
-        "payload": payload or {},
-    }
-    with OUTBOX.open("a") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+def persist_report_event(created_at: str, event_type: str, text: str) -> None:
     run_sqream_sql(
         "insert into market_rt.report_events values ("
-        f"{sql_str(row['created_at'])}, {sql_str(event_type)}, {sql_str(text)});"
+        f"{sql_str(created_at)}, {sql_str(event_type)}, {sql_str(text)});"
     )
-    subprocess.run(
-        ["node", REMOTEAGENT_REPORT_BIN, "--session", REMOTEAGENT_PUBLIC_SESSION_ID, text],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    print(text)
+
+
+def report(event_type: str, text: str, payload: dict | None = None) -> None:
+    notify(event_type, text, payload, persist_report=persist_report_event)
 
 
 def parse_surge_symbols(out: str) -> list[SurgeSymbol]:
@@ -998,4 +984,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        notify_error("sqream_runtime_events", exc, persist_report=persist_report_event)
+        raise
