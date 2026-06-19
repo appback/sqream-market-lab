@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import traceback
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -14,7 +16,10 @@ from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = BASE_DIR / "logs"
+STATE_DIR = BASE_DIR / "state"
 OUTBOX = LOG_DIR / "telegram_report_outbox.jsonl"
+DELIVERY_LOG = LOG_DIR / "report_notifier_delivery.jsonl"
+REPORTBOT_CHAT_ID_CACHE = STATE_DIR / "reportbot_chat_id.txt"
 NY_TZ = ZoneInfo("America/New_York")
 
 REMOTEAGENT_REPORT_BIN = os.environ.get(
@@ -22,6 +27,11 @@ REMOTEAGENT_REPORT_BIN = os.environ.get(
     "/home/ospadmin/.remoteagent/app/remoteagent-src/dist/report-telegram.js",
 )
 REMOTEAGENT_PUBLIC_SESSION_ID = os.environ.get("REMOTEAGENT_PUBLIC_SESSION_ID", "S002")
+REMOTEAGENT_SECRET_BIN_CANDIDATES = (
+    os.environ.get("REMOTEAGENT_SECRET_BIN", ""),
+    "/home/ospadmin/.remoteagent/app/remoteagent-src/dist/secret-helper.js",
+    "/home/ospadmin/.nvm/versions/node/v20.20.2/lib/node_modules/appback-remoteagent/dist/secret-helper.js",
+)
 
 
 PersistReport = Callable[[str, str, str], None]
@@ -37,6 +47,129 @@ def _append_outbox(created_at: str, event_type: str, text: str, payload: dict | 
     }
     with OUTBOX.open("a") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _append_delivery(event_type: str, payload: dict) -> None:
+    LOG_DIR.mkdir(exist_ok=True)
+    row = {
+        "created_at": datetime.now(NY_TZ).isoformat(),
+        "event_type": event_type,
+        "payload": payload,
+    }
+    with DELIVERY_LOG.open("a") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _get_secret(key: str) -> str:
+    for candidate in REMOTEAGENT_SECRET_BIN_CANDIDATES:
+        if not candidate:
+            continue
+        secret_bin = Path(candidate)
+        if not secret_bin.exists():
+            continue
+        result = subprocess.run(
+            ["node", str(secret_bin), "get", key],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return ""
+
+
+def _resolve_reportbot_token() -> str:
+    return os.environ.get("REPORTBOT_TOKEN", "").strip() or _get_secret("REPORTBOT_TOKEN")
+
+
+def _cache_reportbot_chat_id(chat_id: str) -> None:
+    STATE_DIR.mkdir(exist_ok=True)
+    REPORTBOT_CHAT_ID_CACHE.write_text(chat_id.strip() + "\n")
+
+
+def _resolve_reportbot_chat_id(token: str) -> str:
+    env_chat_id = os.environ.get("REPORTBOT_CHAT_ID", "").strip()
+    if env_chat_id:
+        _cache_reportbot_chat_id(env_chat_id)
+        return env_chat_id
+
+    secret_chat_id = _get_secret("REPORTBOT_CHAT_ID").strip()
+    if secret_chat_id:
+        _cache_reportbot_chat_id(secret_chat_id)
+        return secret_chat_id
+
+    if REPORTBOT_CHAT_ID_CACHE.exists():
+        cached = REPORTBOT_CHAT_ID_CACHE.read_text().strip()
+        if cached:
+            return cached
+
+    if not token:
+        return ""
+
+    try:
+        with urllib.request.urlopen(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            timeout=10,
+        ) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        _append_delivery("reportbot_chat_id_discovery_failed", {"error": str(exc)})
+        return ""
+
+    for item in reversed(data.get("result", [])):
+        message = item.get("message") or item.get("channel_post") or item.get("edited_message") or {}
+        chat = message.get("chat") or {}
+        chat_id = chat.get("id")
+        if chat_id is not None:
+            resolved = str(chat_id)
+            _cache_reportbot_chat_id(resolved)
+            return resolved
+    return ""
+
+
+def _send_reportbot(text: str) -> None:
+    token = _resolve_reportbot_token()
+    if not token:
+        _append_delivery("reportbot_skipped", {"reason": "REPORTBOT_TOKEN missing"})
+        return
+
+    chat_id = _resolve_reportbot_chat_id(token)
+    if not chat_id:
+        _append_delivery(
+            "reportbot_skipped",
+            {"reason": "REPORTBOT_CHAT_ID missing and getUpdates returned no chat"},
+        )
+        return
+
+    data = urllib.parse.urlencode(
+        {
+            "chat_id": chat_id,
+            "text": text,
+            "disable_web_page_preview": "true",
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data=data,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        _append_delivery("reportbot_send_failed", {"error": str(exc)})
+        return
+
+    result = body.get("result") or {}
+    chat = result.get("chat") or {}
+    _append_delivery(
+        "reportbot_send_ok" if body.get("ok") else "reportbot_send_failed",
+        {
+            "ok": bool(body.get("ok")),
+            "message_id": result.get("message_id"),
+            "chat_id": chat.get("id"),
+        },
+    )
 
 
 def _send_remoteagent(text: str) -> None:
@@ -71,6 +204,7 @@ def notify(
                 f"[보고 저장 실패] event_type={event_type} error={exc}",
                 {"source_event_type": event_type, "error": str(exc)},
             )
+    _send_reportbot(text)
     _send_remoteagent(text)
     if print_text:
         print(text)
