@@ -17,6 +17,7 @@ import paramiko
 
 from collect_delayed_intraday_bars import collect, load_symbols, write_parquet
 from report_notifier import notify
+from market_calendar import market_closed_reason
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -230,6 +231,20 @@ def main() -> int:
     parser.add_argument("--load-only", action="store_true")
     parser.add_argument("--analyze-only", action="store_true")
     args = parser.parse_args()
+
+    closed_reason = market_closed_reason()
+    if closed_reason:
+        result = {
+            "mode": "analyze_only" if args.analyze_only else "load_only" if args.load_only else "collect",
+            "partition": args.partition,
+            "partition_index": args.partition_index,
+            "partition_count": args.partition_count,
+            "skipped": "market_closed",
+            "reason": closed_reason,
+            "market_date": datetime.now(NY_TZ).strftime("%Y-%m-%d"),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
 
     if args.analyze_only:
         return run_analysis_cycle()

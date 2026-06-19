@@ -13,6 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from report_notifier import notify, notify_error
+from market_calendar import market_closed_reason
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -946,6 +947,18 @@ def main() -> int:
     parser.add_argument("--market-open", action="store_true")
     parser.add_argument("--market-close", action="store_true")
     args = parser.parse_args()
+
+    closed_reason = market_closed_reason()
+    if closed_reason:
+        if args.market_open:
+            report(
+                "장휴장",
+                f"[장휴장] market_date={datetime.now(NY_TZ).strftime('%Y-%m-%d')} reason={closed_reason}",
+                {"reason": closed_reason},
+            )
+        elif not args.market_close and not args.daily_report:
+            print(f"market closed: {closed_reason}")
+        return 0
 
     ensure_runtime_objects()
     state = load_state()
