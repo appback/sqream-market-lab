@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import traceback
 import urllib.parse
@@ -31,6 +32,12 @@ REMOTEAGENT_SECRET_BIN_CANDIDATES = (
     os.environ.get("REMOTEAGENT_SECRET_BIN", ""),
     "/home/ospadmin/.remoteagent/app/remoteagent-src/dist/secret-helper.js",
     "/home/ospadmin/.nvm/versions/node/v20.20.2/lib/node_modules/appback-remoteagent/dist/secret-helper.js",
+)
+NODE_BIN_CANDIDATES = (
+    os.environ.get("NODE_BIN", ""),
+    "/home/ospadmin/.nvm/versions/node/v20.20.2/bin/node",
+    shutil.which("node") or "",
+    "/usr/bin/node",
 )
 
 
@@ -61,6 +68,11 @@ def _append_delivery(event_type: str, payload: dict) -> None:
 
 
 def _get_secret(key: str) -> str:
+    node_bin = next((candidate for candidate in NODE_BIN_CANDIDATES if candidate and Path(candidate).exists()), "")
+    if not node_bin:
+        _append_delivery("secret_lookup_failed", {"key": key, "reason": "node binary missing"})
+        return ""
+
     for candidate in REMOTEAGENT_SECRET_BIN_CANDIDATES:
         if not candidate:
             continue
@@ -68,13 +80,23 @@ def _get_secret(key: str) -> str:
         if not secret_bin.exists():
             continue
         result = subprocess.run(
-            ["node", str(secret_bin), "get", key],
+            [node_bin, str(secret_bin), "get", key],
             capture_output=True,
             text=True,
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
+        if result.returncode != 0:
+            _append_delivery(
+                "secret_lookup_failed",
+                {
+                    "key": key,
+                    "secret_bin": str(secret_bin),
+                    "returncode": result.returncode,
+                    "stderr": result.stderr.strip().splitlines()[-1:] or [],
+                },
+            )
     return ""
 
 
@@ -176,8 +198,11 @@ def _send_remoteagent(text: str) -> None:
     report_bin = Path(REMOTEAGENT_REPORT_BIN)
     if not report_bin.exists() or not REMOTEAGENT_PUBLIC_SESSION_ID:
         return
+    node_bin = next((candidate for candidate in NODE_BIN_CANDIDATES if candidate and Path(candidate).exists()), "")
+    if not node_bin:
+        return
     subprocess.run(
-        ["node", str(report_bin), "--session", REMOTEAGENT_PUBLIC_SESSION_ID, text],
+        [node_bin, str(report_bin), "--session", REMOTEAGENT_PUBLIC_SESSION_ID, text],
         capture_output=True,
         text=True,
         check=False,
