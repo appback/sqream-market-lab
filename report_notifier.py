@@ -149,11 +149,11 @@ def _resolve_reportbot_chat_id(token: str) -> str:
     return ""
 
 
-def _send_reportbot(text: str) -> None:
+def _send_reportbot(text: str) -> bool:
     token = _resolve_reportbot_token()
     if not token:
         _append_delivery("reportbot_skipped", {"reason": "REPORTBOT_TOKEN missing"})
-        return
+        return False
 
     chat_id = _resolve_reportbot_chat_id(token)
     if not chat_id:
@@ -161,7 +161,7 @@ def _send_reportbot(text: str) -> None:
             "reportbot_skipped",
             {"reason": "REPORTBOT_CHAT_ID missing and getUpdates returned no chat"},
         )
-        return
+        return False
 
     data = urllib.parse.urlencode(
         {
@@ -180,18 +180,20 @@ def _send_reportbot(text: str) -> None:
             body = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
         _append_delivery("reportbot_send_failed", {"error": str(exc)})
-        return
+        return False
 
     result = body.get("result") or {}
     chat = result.get("chat") or {}
+    sent = bool(body.get("ok"))
     _append_delivery(
-        "reportbot_send_ok" if body.get("ok") else "reportbot_send_failed",
+        "reportbot_send_ok" if sent else "reportbot_send_failed",
         {
-            "ok": bool(body.get("ok")),
+            "ok": sent,
             "message_id": result.get("message_id"),
             "chat_id": chat.get("id"),
         },
     )
+    return sent
 
 
 def _send_remoteagent(text: str) -> None:
@@ -229,8 +231,10 @@ def notify(
                 f"[보고 저장 실패] event_type={event_type} error={exc}",
                 {"source_event_type": event_type, "error": str(exc)},
             )
-    _send_reportbot(text)
-    _send_remoteagent(text)
+    # REPORTBOT is the product reporting path. RemoteAgent is only a fallback;
+    # sending both creates duplicated Telegram messages in the same chat.
+    if not _send_reportbot(text):
+        _send_remoteagent(text)
     if print_text:
         print(text)
 
