@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from report_notifier import notify, notify_error
 from market_calendar import market_closed_reason
+from symbol_directory import symbol_identity
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -604,7 +605,7 @@ def record_detection(state: dict, item: SurgeSymbol) -> None:
     report(
         "매수후보 감지",
         (
-            f"[매수후보 감지] 종목={item.symbol} 구분=급등후눌림 "
+            f"[매수후보 감지] {symbol_identity(item.symbol)} 구분=급등후눌림 "
             f"상태=진입조건대기 현재상승={item.max_day_return_pct:.1f}% "
             f"신호시각={item.first_signal_time} 매수가={item.entry_price:.4f} "
             f"목표가={item.target_price:.4f} 손절가={item.stop_price:.4f}"
@@ -629,7 +630,7 @@ def record_pre_surge_watch(state: dict, item: PreSurgeWatchSymbol) -> None:
     report(
         "감시대상",
         (
-            f"[감시대상] 종목={item.symbol} 전략=pre_surge_watch "
+            f"[감시대상] {symbol_identity(item.symbol)} 전략=pre_surge_watch "
             "매수여부=아님 상태=감시전용 "
             f"시각={item.last_bar_time} 현재가={item.last_close:.4f} "
             f"당일등락={item.day_return_pct:.1f}% 변동폭={item.intraday_range_pct:.1f}% "
@@ -657,7 +658,7 @@ def record_d1_vol5_absret10_watch(state: dict, item: D1Vol5Absret10Symbol) -> No
     report(
         "매수후보 감지",
         (
-            f"[매수후보 감지] 종목={item.symbol} 전략=d1_vol5_absret10 "
+            f"[매수후보 감지] {symbol_identity(item.symbol)} 전략=d1_vol5_absret10 "
             "매수여부=조건충족시매수 상태=선행검증 "
             f"신호일={item.signal_date} 기준가={item.close_price:.4f} "
             f"예상매수가={item.entry_price:.4f} 목표가={item.target_price:.4f} 손절가={item.stop_price:.4f} "
@@ -695,7 +696,7 @@ def maybe_open_position(state: dict, symbol: str, item: dict, policy: RuntimeStr
     report(
         "모의매수 발생",
         (
-            f"[모의매수 발생] 종목={symbol} 전략={ALGORITHM_NAME} "
+            f"[모의매수 발생] {symbol_identity(symbol)} 전략={ALGORITHM_NAME} "
             f"매수가={entry_price:.4f} 목표가={float(item['target_price']):.4f} "
             f"손절가={float(item['stop_price']):.4f} 장세={policy.regime} "
             f"시간대={policy.time_bucket} 비중={policy.position_size_multiplier:.2f}"
@@ -740,7 +741,7 @@ def maybe_open_d1_position(state: dict, symbol: str, item: dict, policy: Runtime
     report(
         "모의매수 발생",
         (
-            f"[모의매수 발생] 종목={symbol} 전략={D1_ALGORITHM_NAME} "
+            f"[모의매수 발생] {symbol_identity(symbol)} 전략={D1_ALGORITHM_NAME} "
             f"매수가={entry_price:.4f} 목표가={target_price:.4f} 손절가={stop_price:.4f} "
             f"근거=전일거래량{float(item['volume_x20']):.1f}x "
             f"장세={policy.regime} 시간대={policy.time_bucket} 비중={policy.position_size_multiplier:.2f}"
@@ -802,7 +803,7 @@ def maybe_open_sideways_position(state: dict, item: StrategyTradeTarget, policy:
     report(
         "모의매수 발생",
         (
-            f"[모의매수 발생] 종목={item.symbol} 전략={SIDEWAYS_ALGORITHM_NAME} "
+            f"[모의매수 발생] {symbol_identity(item.symbol)} 전략={SIDEWAYS_ALGORITHM_NAME} "
             f"매수가={entry_price:.4f} 목표가={target_price:.4f} 손절가={stop_price:.4f} "
             f"신호시각={item.signal_time} 체결시각={latest_time} "
             f"비용={SIDEWAYS_ROUND_TRIP_COST_PCT:.2f}% 체결쿠션={SIDEWAYS_TARGET_FILL_CUSHION_PCT:.2f}% "
@@ -839,7 +840,7 @@ def maybe_close_position(state: dict, key: str, position: dict) -> None:
     pnl_pct = gross_pnl_pct - round_trip_cost_pct
     report(
         "모의매도 발생",
-        f"[모의매도 발생] 종목={symbol} 매도가={exit_price:.4f} 사유={reason}",
+        f"[모의매도 발생] {symbol_identity(symbol)} 매도가={exit_price:.4f} 사유={reason}",
         {"symbol": symbol, "exit_price": exit_price, "reason": reason},
     )
     position.update(
@@ -855,7 +856,7 @@ def maybe_close_position(state: dict, key: str, position: dict) -> None:
     append_trade_ledger(symbol, position)
     report(
         "모의정산",
-        f"[모의정산] 종목={symbol} 매도가={exit_price:.4f} 사유={reason} "
+        f"[모의정산] {symbol_identity(symbol)} 매도가={exit_price:.4f} 사유={reason} "
         f"손익={pnl_pct:.2f}% 총손익={gross_pnl_pct:.2f}% 비용={round_trip_cost_pct:.2f}%",
         position,
     )
@@ -876,7 +877,7 @@ def close_open_positions_at_eod(state: dict) -> None:
         pnl_pct = gross_pnl_pct - round_trip_cost_pct
         report(
             "모의매도 발생",
-            f"[모의매도 발생] 종목={symbol} 매도가={exit_price:.4f} 사유=eod",
+            f"[모의매도 발생] {symbol_identity(symbol)} 매도가={exit_price:.4f} 사유=eod",
             {"symbol": symbol, "exit_price": exit_price, "reason": "eod"},
         )
         position.update(
@@ -892,7 +893,7 @@ def close_open_positions_at_eod(state: dict) -> None:
         append_trade_ledger(symbol, position)
         report(
             "모의정산",
-            f"[모의정산] 종목={symbol} 매도가={exit_price:.4f} 사유=eod "
+            f"[모의정산] {symbol_identity(symbol)} 매도가={exit_price:.4f} 사유=eod "
             f"손익={pnl_pct:.2f}% 총손익={gross_pnl_pct:.2f}% 비용={round_trip_cost_pct:.2f}%",
             position,
         )
