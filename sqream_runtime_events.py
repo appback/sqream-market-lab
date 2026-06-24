@@ -31,6 +31,11 @@ SIDEWAYS_TARGET_FILL_CUSHION_PCT = 0.5
 SIDEWAYS_MAX_ENTRY_SLIPPAGE_PCT = 0.5
 DEFAULT_RUNTIME_REGIME = "unknown"
 DEFAULT_TIME_BUCKET = "unknown"
+STRATEGY_LABELS = {
+    ALGORITHM_NAME: "급등눌림",
+    D1_ALGORITHM_NAME: "D1거래량돌파",
+    SIDEWAYS_ALGORITHM_NAME: "횡보VWAP",
+}
 
 SQREAM_HOST = "192.168.0.26"
 SQREAM_PORT = "3108"
@@ -274,6 +279,32 @@ def summarize_trades(rows: list[dict]) -> dict:
         "best": max(pnls) if pnls else 0.0,
         "worst": min(pnls) if pnls else 0.0,
     }
+
+
+def format_summary(summary: dict) -> str:
+    return (
+        f"거래={summary['trades']} 승={summary['wins']} 패={summary['losses']} "
+        f"승률={summary['win_rate']:.1f}% 평균={summary['avg_pnl']:+.2f}% "
+        f"합계={summary['total_pnl']:+.2f}%"
+    )
+
+
+def summarize_by_strategy(rows: list[dict]) -> list[tuple[str, dict]]:
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(str(row.get("algorithm") or "unknown"), []).append(row)
+    return [(strategy, summarize_trades(strategy_rows)) for strategy, strategy_rows in sorted(grouped.items())]
+
+
+def format_strategy_summaries(rows: list[dict]) -> str:
+    summaries = summarize_by_strategy(rows)
+    if not summaries:
+        return "- 없음"
+    parts = []
+    for strategy, summary in summaries:
+        label = STRATEGY_LABELS.get(strategy, strategy)
+        parts.append(f"- {label}: {format_summary(summary)}")
+    return "\n".join(parts)
 
 
 def recent_trading_day_rows(days: int = 10) -> list[dict]:
@@ -913,20 +944,18 @@ def emit_daily_report(state: dict) -> None:
     report(
         "일일결산",
         (
-            f"[일일결산] algorithms={ALGORITHM_NAME},{D1_ALGORITHM_NAME},{SIDEWAYS_ALGORITHM_NAME} "
-            f"regime={policy.regime} time_bucket={policy.time_bucket} allocation={policy.allocation_rule} "
-            f"today={today_result} detected={len(state.get('detected', {}))} "
-            f"pre_watch={len(state.get('pre_surge_watch', {}))} "
-            f"d1_watch={len(state.get('d1_vol5_absret10_watch', {}))} "
-            f"open={len(open_positions)} trades={today_summary['trades']} "
-            f"wins={today_summary['wins']} losses={today_summary['losses']} "
-            f"win_rate={today_summary['win_rate']:.1f}% "
-            f"avg_pnl={today_summary['avg_pnl']:.2f}% total_pnl={today_summary['total_pnl']:.2f}% "
-            f"rolling_10d={rolling_result} days={rolling_days} trades={rolling_summary['trades']} "
-            f"wins={rolling_summary['wins']} losses={rolling_summary['losses']} "
-            f"win_rate={rolling_summary['win_rate']:.1f}% "
-            f"avg_pnl={rolling_summary['avg_pnl']:.2f}% total_pnl={rolling_summary['total_pnl']:.2f}% "
-            f"best={rolling_summary['best']:.2f}% worst={rolling_summary['worst']:.2f}%"
+            "[일일결산]\n"
+            f"기준일: {today}\n"
+            f"당일 결과: {today_result} ({format_summary(today_summary)})\n"
+            f"전략별 당일:\n{format_strategy_summaries(closed)}\n"
+            f"10일 누적: {rolling_result} / {rolling_days}일 "
+            f"({format_summary(rolling_summary)} 최고={rolling_summary['best']:+.2f}% 최악={rolling_summary['worst']:+.2f}%)\n"
+            f"감시 현황: 급등눌림후보={len(state.get('detected', {}))} "
+            f"선감시={len(state.get('pre_surge_watch', {}))} "
+            f"D1후보={len(state.get('d1_vol5_absret10_watch', {}))} "
+            f"보유중={len(open_positions)}\n"
+            f"운영 상태: 장세={policy.regime} 시간대={policy.time_bucket} 배분={policy.allocation_rule}\n"
+            "전략: 급등눌림 / D1거래량돌파 / 횡보VWAP"
         ),
         {
             "algorithms": [ALGORITHM_NAME, D1_ALGORITHM_NAME, SIDEWAYS_ALGORITHM_NAME],
