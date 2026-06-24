@@ -307,6 +307,40 @@ def format_strategy_summaries(rows: list[dict]) -> str:
     return "\n".join(parts)
 
 
+def _short_time(value: str | None) -> str:
+    if not value:
+        return "?"
+    # Stored timestamps are ISO-like strings such as 2026-06-23T09:37:00-04:00.
+    if "T" in value and len(value) >= 16:
+        return value.split("T", 1)[1][:5]
+    if " " in value and len(value) >= 16:
+        return value.split(" ", 1)[1][:5]
+    return value
+
+
+def format_trade_details(rows: list[dict], limit: int = 12) -> str:
+    if not rows:
+        return "- 없음"
+    lines = []
+    sorted_rows = sorted(rows, key=lambda row: (str(row.get("opened_at") or ""), str(row.get("symbol") or "")))
+    for row in sorted_rows[:limit]:
+        symbol = str(row.get("symbol") or "?")
+        strategy = STRATEGY_LABELS.get(str(row.get("algorithm") or ""), str(row.get("algorithm") or "unknown"))
+        entry_price = float(row.get("entry_price") or 0.0)
+        exit_price = float(row.get("exit_price") or 0.0)
+        pnl_pct = float(row.get("pnl_pct") or 0.0)
+        reason = str(row.get("reason") or "?")
+        lines.append(
+            f"- {symbol_identity(symbol)} / {strategy} / "
+            f"{_short_time(row.get('opened_at'))}->{_short_time(row.get('closed_at'))} / "
+            f"매수={entry_price:.4f} 매도={exit_price:.4f} 손익={pnl_pct:+.2f}% 사유={reason}"
+        )
+    remaining = len(sorted_rows) - limit
+    if remaining > 0:
+        lines.append(f"- 외 {remaining}건")
+    return "\n".join(lines)
+
+
 def recent_trading_day_rows(days: int = 10) -> list[dict]:
     rows = load_trade_ledger()
     dates = sorted({row.get("trade_date") for row in rows if row.get("trade_date")}, reverse=True)[:days]
@@ -948,6 +982,7 @@ def emit_daily_report(state: dict) -> None:
             f"기준일: {today}\n"
             f"당일 결과: {today_result} ({format_summary(today_summary)})\n"
             f"전략별 당일:\n{format_strategy_summaries(closed)}\n"
+            f"당일 거래 상세:\n{format_trade_details(closed)}\n"
             f"10일 누적: {rolling_result} / {rolling_days}일 "
             f"({format_summary(rolling_summary)} 최고={rolling_summary['best']:+.2f}% 최악={rolling_summary['worst']:+.2f}%)\n"
             f"감시 현황: 급등눌림후보={len(state.get('detected', {}))} "
