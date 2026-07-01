@@ -36,6 +36,7 @@ The system is not live trading yet. Treat all outputs as paper-trading evidence,
 | Data | Path |
 | --- | --- |
 | strategy versions and labels | `docs/strategy_versions.json` |
+| reusable strategy condition sets | `docs/strategy_condition_sets.json` |
 | strategy history | `docs/strategy_history.md` |
 | paper-trade ledger | `state/paper_trade_ledger.jsonl` |
 | runtime state | `state/runtime_state.json` |
@@ -100,6 +101,26 @@ User-facing names are stored in `docs/strategy_versions.json` as `display_name`.
 | 상승눌림 | uptrend VWAP pullback candidates |
 | 하단반등 | lower-range mean reversion candidates |
 
+## Strategy Condition Sets
+
+Reusable strategy conditions are managed in `docs/strategy_condition_sets.json`.
+Use this file for admin-level composition of separated conditions:
+
+- time window,
+- market regime,
+- pattern,
+- volume,
+- risk,
+- allocation.
+
+Admin page:
+
+- `/admin/condition-sets`
+
+This is currently a management/configuration layer.
+Runtime execution still uses explicit strategy logic.
+Before condition sets drive live runtime behavior, add validation and compare dry-run results against the current strategy code path.
+
 ## Current D1거래량돌파 Interpretation
 
 Use the current time policy when quoting D1 performance:
@@ -155,7 +176,8 @@ Pages:
 
 - `/`: dashboard,
 - `/api/summary?days=10`: JSON summary,
-- `/admin/strategies`: strategy status, display name, and memo editor.
+- `/admin/strategies`: strategy status, display name, and memo editor,
+- `/admin/condition-sets`: strategy condition-set composition editor.
 
 Admin web is dependency-free Python HTML for now. If charts are added, start with Chart.js and keep the Python server as the data API unless UI complexity grows.
 Chart scope is performance only: strategy PnL, win rate, daily PnL, and running PnL.

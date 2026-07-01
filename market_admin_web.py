@@ -16,6 +16,7 @@ from typing import Any
 BASE_DIR = Path(__file__).resolve().parent
 LEDGER_PATH = BASE_DIR / "state" / "paper_trade_ledger.jsonl"
 STRATEGY_PATH = BASE_DIR / "docs" / "strategy_versions.json"
+CONDITION_SET_PATH = BASE_DIR / "docs" / "strategy_condition_sets.json"
 ACTIVE_STATUSES = {"active_paper", "candidate"}
 D1_ALGORITHM_NAME = "d1_vol5_absret10_breakout_2_target10_stop5_eod"
 D1_OPENING_START = (9, 30, 0)
@@ -40,6 +41,16 @@ def read_strategies() -> list[dict[str, Any]]:
 
 def write_strategies(rows: list[dict[str, Any]]) -> None:
     STRATEGY_PATH.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def read_condition_config() -> dict[str, Any]:
+    if not CONDITION_SET_PATH.exists():
+        return {"condition_catalog": {}, "strategy_condition_sets": []}
+    return json.loads(CONDITION_SET_PATH.read_text(encoding="utf-8"))
+
+
+def write_condition_config(config: dict[str, Any]) -> None:
+    CONDITION_SET_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def recent_rows(rows: list[dict[str, Any]], days: int) -> list[dict[str, Any]]:
@@ -379,6 +390,52 @@ def admin_table(strategies: list[dict[str, Any]]) -> str:
     )
 
 
+def condition_sets_table(config: dict[str, Any]) -> str:
+    rows = []
+    for item in config.get("strategy_condition_sets", []):
+        item_id = str(item.get("id") or "")
+        conditions = json.dumps(item.get("conditions") or {}, ensure_ascii=False, indent=2)
+        rows.append(
+            "<tr>"
+            f"<td><code>{esc(item_id)}</code></td>"
+            f"<td><input name='display_name' value='{esc(item.get('display_name'))}' form='condition-form-{esc(item_id)}'></td>"
+            f"<td><code>{esc(item.get('strategy_name'))}</code></td>"
+            "<td>"
+            f"<form id='condition-form-{esc(item_id)}' method='post' action='/admin/condition-sets/update' class='inline-form'>"
+            f"<input type='hidden' name='id' value='{esc(item_id)}'>"
+            f"<input name='status' value='{esc(item.get('status'))}'>"
+            "</td><td>"
+            f"<textarea name='conditions' class='code-textarea'>{esc(conditions)}</textarea>"
+            "</td><td>"
+            f"<textarea name='decision'>{esc(item.get('decision'))}</textarea>"
+            "</td><td>"
+            "<button type='submit'>저장</button></form>"
+            "</td></tr>"
+        )
+    return (
+        "<table><thead><tr><th>ID</th><th>표시명</th><th>전략명</th><th>상태</th>"
+        "<th>조건 JSON</th><th>판단/메모</th><th>관리</th></tr></thead><tbody>"
+        + "\n".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def condition_catalog_html(config: dict[str, Any]) -> str:
+    parts = []
+    catalog = config.get("condition_catalog") or {}
+    for category, values in catalog.items():
+        rows = []
+        for key, description in (values or {}).items():
+            rows.append(f"<tr><td><code>{esc(key)}</code></td><td>{esc(description)}</td></tr>")
+        parts.append(
+            f"<section class='card'><h2>{esc(category)}</h2>"
+            "<table><thead><tr><th>조건 코드</th><th>설명</th></tr></thead><tbody>"
+            + "\n".join(rows)
+            + "</tbody></table></section>"
+        )
+    return "<div class='condition-catalog'>" + "\n".join(parts) + "</div>"
+
+
 def layout(title: str, body: str) -> bytes:
     return f"""<!doctype html>
 <html lang="ko">
@@ -409,15 +466,17 @@ def layout(title: str, body: str) -> bytes:
     code {{ color:#bae6fd; white-space:normal; }}
     input, textarea {{ width:100%; box-sizing:border-box; border:1px solid #334155; border-radius:8px; background:#0b1220; color:var(--text); padding:8px; }}
     textarea {{ min-height:58px; }}
+    .code-textarea {{ min-height:150px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }}
     button {{ border:0; border-radius:10px; padding:9px 14px; background:#38bdf8; color:#082f49; font-weight:800; cursor:pointer; }}
     .good {{ color:var(--good); }}
     .bad {{ color:var(--bad); }}
     .section-title {{ margin-top:26px; }}
+    .condition-catalog {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }}
     @media (max-width:760px) {{ .chart-grid {{ grid-template-columns:1fr; }} }}
   </style>
 </head>
 <body><main>
-  <nav><a href="/">Dashboard</a><a href="/admin/strategies">Strategy Admin</a><a href="/api/summary">API Summary</a></nav>
+  <nav><a href="/">Dashboard</a><a href="/admin/strategies">Strategy Admin</a><a href="/admin/condition-sets">Condition Sets</a><a href="/api/summary">API Summary</a></nav>
   {body}
 </main></body></html>""".encode("utf-8")
 
@@ -447,6 +506,7 @@ class Handler(BaseHTTPRequestHandler):
         days = int(qs.get("days", ["10"])[0])
         ledger = read_jsonl(LEDGER_PATH)
         strategies = read_strategies()
+        condition_config = read_condition_config()
         recent = recent_rows(ledger, days)
         active_names = active_strategy_names(strategies)
         active_recent = [row for row in recent if row.get("algorithm") in active_names]
@@ -472,6 +532,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_html(
                 "Strategy Admin",
                 f"<h1>Strategy Admin</h1><p class='sub'>전략 상태와 판단 메모를 관리합니다. 저장 대상: {esc(STRATEGY_PATH)}</p>{admin_table(strategies)}",
+            )
+            return
+
+        if parsed.path == "/admin/condition-sets":
+            self.send_html(
+                "Condition Sets",
+                f"<h1>Condition Sets</h1>"
+                f"<p class='sub'>시간대, 장세, 눌림/횡보/거래량/위험관리 조건을 조합해 전략을 관리합니다. 저장 대상: {esc(CONDITION_SET_PATH)}</p>"
+                + condition_sets_table(condition_config)
+                + "<h2 class='section-title'>조건 카탈로그</h2>"
+                + condition_catalog_html(condition_config),
             )
             return
 
@@ -504,9 +575,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/admin/condition-sets/update":
+            self.update_condition_set()
+            return
         if parsed.path != "/admin/strategies/update":
             self.send_html("Not Found", "<h1>404</h1>", 404)
             return
+        self.update_strategy()
+
+    def update_strategy(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length).decode("utf-8")
         form = urllib.parse.parse_qs(body)
@@ -527,6 +604,36 @@ class Handler(BaseHTTPRequestHandler):
             write_strategies(strategies)
         self.send_response(303)
         self.send_header("Location", "/admin/strategies")
+        self.end_headers()
+
+    def update_condition_set(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length).decode("utf-8")
+        form = urllib.parse.parse_qs(body)
+        item_id = (form.get("id") or [""])[0]
+        status = (form.get("status") or [""])[0].strip()
+        display_name = (form.get("display_name") or [""])[0].strip()
+        decision = (form.get("decision") or [""])[0].strip()
+        conditions_raw = (form.get("conditions") or ["{}"])[0]
+        try:
+            conditions = json.loads(conditions_raw)
+        except json.JSONDecodeError as exc:
+            self.send_html("Invalid JSON", f"<h1>Invalid conditions JSON</h1><p>{esc(exc)}</p>", 400)
+            return
+        config = read_condition_config()
+        updated = False
+        for row in config.get("strategy_condition_sets", []):
+            if row.get("id") == item_id:
+                row["display_name"] = display_name
+                row["status"] = status
+                row["conditions"] = conditions
+                row["decision"] = decision
+                updated = True
+                break
+        if updated:
+            write_condition_config(config)
+        self.send_response(303)
+        self.send_header("Location", "/admin/condition-sets")
         self.end_headers()
 
 

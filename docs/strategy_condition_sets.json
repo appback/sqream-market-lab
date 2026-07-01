@@ -1,0 +1,152 @@
+{
+  "condition_catalog": {
+    "time_window": {
+      "opening_0930_1015": "09:30~10:15 ET only",
+      "trend_confirm_1015_1130": "10:15~11:30 ET trend confirmation",
+      "midday_1130_1430": "11:30~14:30 ET midday operation",
+      "late_reduce_1430_1530": "14:30~15:30 ET reduced size",
+      "close_no_new_1530_1600": "15:30~16:00 ET no new entries"
+    },
+    "market_regime": {
+      "not_downtrend": "disable new entries during downtrend",
+      "uptrend_only": "allow only uptrend regime",
+      "sideways_only": "allow only sideways regime",
+      "defensive_downtrend": "downtrend defensive mode"
+    },
+    "pattern": {
+      "surge_pullback_35": "intraday +100% surge then 35% pullback entry",
+      "entry_breakout_2pct": "entry after +2% breakout from D1 precursor level",
+      "sideways_vwap_lower_range": "lower range and below VWAP mean reversion",
+      "uptrend_breakout": "running high breakout in uptrend",
+      "uptrend_high_hold": "near running high in uptrend",
+      "uptrend_vwap_pullback": "VWAP pullback in uptrend",
+      "lower10_reversion": "lower 10% range mean reversion"
+    },
+    "volume": {
+      "d1_vol5_absret10": "prior-day volume >= 5x 20d average and abs return <= 10%",
+      "run_volume_2m": "running intraday volume >= 2M",
+      "high_volume_sideways": "high-volume sideways candidate",
+      "none": "no standalone volume condition"
+    },
+    "risk": {
+      "target25_stop15_eod": "target +25%, stop -15%, EOD close",
+      "target10_stop5_eod": "target +10%, stop -5%, EOD close",
+      "target3_stop2_cost": "target +3%, stop around -2%, cost-adjusted",
+      "target4_stop2_cost": "target +4%, stop -2%, cost-adjusted",
+      "lab_only": "lab-only, not active for paper runtime"
+    },
+    "allocation": {
+      "opening_size_30_pct": "30% paper-size multiplier in opening bucket",
+      "sideways_reversion_size_40_pct": "40% paper-size multiplier for sideways reversion",
+      "default_paper": "default paper size",
+      "disabled": "no runtime allocation"
+    }
+  },
+  "strategy_condition_sets": [
+    {
+      "id": "d1_opening_breakout",
+      "display_name": "D1거래량돌파",
+      "strategy_name": "d1_vol5_absret10_breakout_2_target10_stop5_eod",
+      "status": "active_paper",
+      "conditions": {
+        "time_window": "opening_0930_1015",
+        "market_regime": "not_downtrend",
+        "pattern": "entry_breakout_2pct",
+        "volume": "d1_vol5_absret10",
+        "risk": "target10_stop5_eod",
+        "allocation": "opening_size_30_pct"
+      },
+      "decision": "primary current candidate; quote performance with current opening-only policy"
+    },
+    {
+      "id": "surge_pullback",
+      "display_name": "급등눌림",
+      "strategy_name": "surge_pullback_35_target25_stop15_eod",
+      "status": "active_paper",
+      "conditions": {
+        "time_window": "opening_0930_1015",
+        "market_regime": "not_downtrend",
+        "pattern": "surge_pullback_35",
+        "volume": "none",
+        "risk": "target25_stop15_eod",
+        "allocation": "default_paper"
+      },
+      "decision": "high variance; keep paper-only while collecting samples"
+    },
+    {
+      "id": "sideways_vwap_reversion",
+      "display_name": "횡보VWAP",
+      "strategy_name": "sideways_vwap_reversion_3_target_stop_cost",
+      "status": "disabled",
+      "conditions": {
+        "time_window": "midday_1130_1430",
+        "market_regime": "sideways_only",
+        "pattern": "sideways_vwap_lower_range",
+        "volume": "high_volume_sideways",
+        "risk": "target3_stop2_cost",
+        "allocation": "sideways_reversion_size_40_pct"
+      },
+      "decision": "disabled after live-safe backtest failed"
+    },
+    {
+      "id": "uptrend_breakout",
+      "display_name": "상승돌파",
+      "strategy_name": "uptrend_breakout_b05_vol2m_rs15_breadth60_t4_stop2_cost",
+      "status": "candidate",
+      "conditions": {
+        "time_window": "trend_confirm_1015_1130",
+        "market_regime": "uptrend_only",
+        "pattern": "uptrend_breakout",
+        "volume": "run_volume_2m",
+        "risk": "target4_stop2_cost",
+        "allocation": "default_paper"
+      },
+      "decision": "candidate only; keep lab/paper observation until more out-of-sample days"
+    },
+    {
+      "id": "uptrend_high_hold",
+      "display_name": "상승고점유지",
+      "strategy_name": "uptrend_high_hold_t3_stop15_cost",
+      "status": "disabled",
+      "conditions": {
+        "time_window": "trend_confirm_1015_1130",
+        "market_regime": "uptrend_only",
+        "pattern": "uptrend_high_hold",
+        "volume": "none",
+        "risk": "lab_only",
+        "allocation": "disabled"
+      },
+      "decision": "disabled; poor lab result"
+    },
+    {
+      "id": "uptrend_vwap_pullback",
+      "display_name": "상승눌림",
+      "strategy_name": "uptrend_vwap_pullback_t2_stop1_cost",
+      "status": "disabled",
+      "conditions": {
+        "time_window": "midday_1130_1430",
+        "market_regime": "uptrend_only",
+        "pattern": "uptrend_vwap_pullback",
+        "volume": "none",
+        "risk": "lab_only",
+        "allocation": "disabled"
+      },
+      "decision": "disabled; poor lab result"
+    },
+    {
+      "id": "lower10_reversion",
+      "display_name": "하단반등",
+      "strategy_name": "mr_lower10_t1_stop1_cost",
+      "status": "disabled",
+      "conditions": {
+        "time_window": "midday_1130_1430",
+        "market_regime": "sideways_only",
+        "pattern": "lower10_reversion",
+        "volume": "none",
+        "risk": "lab_only",
+        "allocation": "disabled"
+      },
+      "decision": "disabled; poor lab result"
+    }
+  ]
+}

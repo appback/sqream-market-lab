@@ -28,11 +28,13 @@ MARKET_ADMIN_HOST=0.0.0.0 MARKET_ADMIN_PORT=18085 ./run_market_admin_web.sh
   - D1 current-policy trade detail and excluded trade detail
 - `/api/summary?days=10`: JSON summary
 - `/admin/strategies`: strategy status and decision memo editor
+- `/admin/condition-sets`: integrated condition-set manager
 
 ## Data Sources
 
 - Paper trade ledger: `state/paper_trade_ledger.jsonl`
 - Strategy registry: `docs/strategy_versions.json`
+- Strategy condition sets: `docs/strategy_condition_sets.json`
 
 The dashboard separates active/candidate strategy aggregation from all-strategy aggregation so disabled historical experiments do not distort the current operating view.
 
@@ -61,3 +63,19 @@ Current D1 policy:
 - show excluded historical D1 trades separately
 
 This avoids mixing early non-policy paper trades with the currently intended opening-only D1 operation.
+
+## Condition Set Admin
+
+`/admin/condition-sets` manages reusable condition combinations separately from the raw strategy version registry.
+
+Condition categories:
+
+- `time_window`
+- `market_regime`
+- `pattern`
+- `volume`
+- `risk`
+- `allocation`
+
+This is currently an admin/config layer only. Runtime code still uses the existing strategy-specific logic.
+Before wiring condition sets into runtime execution, add validation and a dry-run comparison against current behavior.
