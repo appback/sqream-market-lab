@@ -17,6 +17,9 @@ BASE_DIR = Path(__file__).resolve().parent
 LEDGER_PATH = BASE_DIR / "state" / "paper_trade_ledger.jsonl"
 STRATEGY_PATH = BASE_DIR / "docs" / "strategy_versions.json"
 ACTIVE_STATUSES = {"active_paper", "candidate"}
+D1_ALGORITHM_NAME = "d1_vol5_absret10_breakout_2_target10_stop5_eod"
+D1_OPENING_START = (9, 30, 0)
+D1_OPENING_END = (10, 15, 0)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -43,6 +46,42 @@ def recent_rows(rows: list[dict[str, Any]], days: int) -> list[dict[str, Any]]:
     dates = sorted({row.get("trade_date") for row in rows if row.get("trade_date")}, reverse=True)[:days]
     date_set = set(dates)
     return [row for row in rows if row.get("trade_date") in date_set]
+
+
+def opened_time_tuple(row: dict[str, Any]) -> tuple[int, int, int] | None:
+    opened_at = str(row.get("opened_at") or "")
+    if "T" not in opened_at:
+        return None
+    time_part = opened_at.split("T", 1)[1].split("-", 1)[0].split("+", 1)[0]
+    try:
+        hour, minute, second = [int(part) for part in time_part.split(":")[:3]]
+    except (TypeError, ValueError):
+        return None
+    return hour, minute, second
+
+
+def d1_current_policy_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result = []
+    for row in rows:
+        if row.get("algorithm") != D1_ALGORITHM_NAME:
+            continue
+        opened_time = opened_time_tuple(row)
+        if opened_time is None:
+            continue
+        if D1_OPENING_START <= opened_time < D1_OPENING_END:
+            result.append(row)
+    return result
+
+
+def d1_excluded_by_policy_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result = []
+    for row in rows:
+        if row.get("algorithm") != D1_ALGORITHM_NAME:
+            continue
+        opened_time = opened_time_tuple(row)
+        if opened_time is None or not (D1_OPENING_START <= opened_time < D1_OPENING_END):
+            result.append(row)
+    return result
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -219,6 +258,27 @@ def trades_table(rows: list[dict[str, Any]], limit: int = 30) -> str:
     )
 
 
+def compact_trades_table(rows: list[dict[str, Any]], limit: int = 20) -> str:
+    body = []
+    for row in sorted(rows, key=lambda x: str(x.get("opened_at") or ""), reverse=True)[:limit]:
+        pnl = float(row.get("pnl_pct") or 0.0)
+        cls = "good" if pnl > 0 else "bad" if pnl < 0 else ""
+        body.append(
+            "<tr>"
+            f"<td>{esc(row.get('trade_date'))}</td>"
+            f"<td><b>{esc(row.get('symbol'))}</b></td>"
+            f"<td>{esc(row.get('opened_at'))}</td>"
+            f"<td class='{cls}'>{fmt_pct(pnl)}</td>"
+            f"<td>{esc(row.get('reason'))}</td>"
+            "</tr>"
+        )
+    return (
+        "<table><thead><tr><th>일자</th><th>종목</th><th>진입</th><th>손익</th><th>사유</th></tr></thead><tbody>"
+        + "\n".join(body)
+        + "</tbody></table>"
+    )
+
+
 def performance_charts(recent: list[dict[str, Any]], strategies: list[dict[str, Any]]) -> str:
     strategy_rows = with_display_names(group_by_strategy(recent), strategies)
     daily_rows = daily_pnl_series(recent)
@@ -390,6 +450,8 @@ class Handler(BaseHTTPRequestHandler):
         recent = recent_rows(ledger, days)
         active_names = active_strategy_names(strategies)
         active_recent = [row for row in recent if row.get("algorithm") in active_names]
+        d1_policy_rows = d1_current_policy_rows(ledger)
+        d1_policy_excluded = d1_excluded_by_policy_rows(ledger)
 
         if parsed.path == "/api/summary":
             self.send_json(
@@ -399,6 +461,8 @@ class Handler(BaseHTTPRequestHandler):
                     "active_recent": summarize(active_recent),
                     "by_strategy_recent": with_display_names(group_by_strategy(recent), strategies),
                     "by_strategy_all": with_display_names(group_by_strategy(ledger), strategies),
+                    "d1_current_policy": summarize(d1_policy_rows),
+                    "d1_current_policy_excluded": summarize(d1_policy_excluded),
                     "active_strategy_names": sorted(active_names),
                 }
             )
@@ -420,9 +484,15 @@ class Handler(BaseHTTPRequestHandler):
             "<div class='cards'>"
             + summary_cards("최근 활성/후보 전략", summarize(active_recent))
             + summary_cards("최근 전체 전략", summarize(recent))
+            + summary_cards("D1 현재 룰", summarize(d1_policy_rows))
             + "</div>"
             "<h2 class='section-title'>성과 차트</h2>"
             + performance_charts(recent, strategies)
+            + "<h2 class='section-title'>D1거래량돌파 현재 룰 상세</h2>"
+            + "<p class='sub'>09:30~10:15 ET 진입만 포함합니다. 과거 비정책 구간 거래는 제외합니다.</p>"
+            + compact_trades_table(d1_policy_rows)
+            + "<h2 class='section-title'>D1 현재 룰 제외 거래</h2>"
+            + compact_trades_table(d1_policy_excluded)
             + "<h2 class='section-title'>전략별 최근 집계</h2>"
             + strategy_table(group_by_strategy(recent), strategies)
             + "<h2 class='section-title'>전략별 전체 누적 집계</h2>"
