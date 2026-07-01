@@ -158,6 +158,8 @@ Pages:
 - `/admin/strategies`: strategy status, display name, and memo editor.
 
 Admin web is dependency-free Python HTML for now. If charts are added, start with Chart.js and keep the Python server as the data API unless UI complexity grows.
+Chart scope is performance only: strategy PnL, win rate, daily PnL, and running PnL.
+Do not add stock price/candle charts unless explicitly requested.
 
 ## Required Checks After Code Changes
 
@@ -209,4 +211,3 @@ Stop the temporary admin process after testing.
 - Commit documentation and code changes together when behavior changes.
 - Do not commit generated staging files, logs, or accidental runtime state unless explicitly intended.
 - Include evidence in final reports: commit hash, test command, API response, or log path.
-

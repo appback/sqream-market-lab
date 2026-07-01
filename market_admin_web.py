@@ -102,6 +102,29 @@ def with_display_names(rows: list[dict[str, Any]], strategies: list[dict[str, An
     return enriched
 
 
+def daily_pnl_series(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        trade_date = str(row.get("trade_date") or "")
+        if trade_date:
+            grouped[trade_date].append(row)
+    result = []
+    running_total = 0.0
+    for trade_date in sorted(grouped):
+        day_rows = grouped[trade_date]
+        total_pnl = sum(float(row.get("pnl_pct") or 0.0) for row in day_rows)
+        running_total += total_pnl
+        result.append(
+            {
+                "trade_date": trade_date,
+                "trades": len(day_rows),
+                "total_pnl": total_pnl,
+                "running_total": running_total,
+            }
+        )
+    return result
+
+
 def fmt_pct(value: float) -> str:
     sign = "+" if value > 0 else ""
     return f"{sign}{value:.2f}%"
@@ -196,6 +219,79 @@ def trades_table(rows: list[dict[str, Any]], limit: int = 30) -> str:
     )
 
 
+def performance_charts(recent: list[dict[str, Any]], strategies: list[dict[str, Any]]) -> str:
+    strategy_rows = with_display_names(group_by_strategy(recent), strategies)
+    daily_rows = daily_pnl_series(recent)
+    payload = {
+        "strategy_labels": [row["display_name"] for row in strategy_rows],
+        "strategy_total_pnl": [round(float(row["total_pnl"]), 4) for row in strategy_rows],
+        "strategy_win_rate": [round(float(row["win_rate"]), 4) for row in strategy_rows],
+        "daily_labels": [row["trade_date"] for row in daily_rows],
+        "daily_pnl": [round(float(row["total_pnl"]), 4) for row in daily_rows],
+        "daily_running_pnl": [round(float(row["running_total"]), 4) for row in daily_rows],
+    }
+    data = json.dumps(payload, ensure_ascii=False)
+    return f"""
+    <section class="chart-grid">
+      <div class="card"><h2>전략별 누적 손익</h2><canvas id="strategyPnlChart" height="120"></canvas></div>
+      <div class="card"><h2>전략별 승률</h2><canvas id="strategyWinRateChart" height="120"></canvas></div>
+      <div class="card wide"><h2>최근 일별 손익 흐름</h2><canvas id="dailyPnlChart" height="90"></canvas></div>
+    </section>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+      const chartData = {data};
+      const textColor = "#e5e7eb";
+      const gridColor = "rgba(148, 163, 184, 0.18)";
+      const good = "#38d996";
+      const bad = "#ff6b6b";
+      const accent = "#7dd3fc";
+      function pnlColors(values) {{
+        return values.map((value) => value >= 0 ? good : bad);
+      }}
+      function baseOptions(percentSuffix = true) {{
+        return {{
+          responsive: true,
+          plugins: {{
+            legend: {{ labels: {{ color: textColor }} }},
+            tooltip: {{ callbacks: {{ label: (ctx) => `${{ctx.dataset.label}}: ${{ctx.parsed.y.toFixed(2)}}${{percentSuffix ? "%" : ""}}` }} }}
+          }},
+          scales: {{
+            x: {{ ticks: {{ color: textColor }}, grid: {{ color: gridColor }} }},
+            y: {{ ticks: {{ color: textColor }}, grid: {{ color: gridColor }} }}
+          }}
+        }};
+      }}
+      new Chart(document.getElementById("strategyPnlChart"), {{
+        type: "bar",
+        data: {{
+          labels: chartData.strategy_labels,
+          datasets: [{{ label: "합계 손익", data: chartData.strategy_total_pnl, backgroundColor: pnlColors(chartData.strategy_total_pnl) }}]
+        }},
+        options: baseOptions()
+      }});
+      new Chart(document.getElementById("strategyWinRateChart"), {{
+        type: "bar",
+        data: {{
+          labels: chartData.strategy_labels,
+          datasets: [{{ label: "승률", data: chartData.strategy_win_rate, backgroundColor: accent }}]
+        }},
+        options: baseOptions()
+      }});
+      new Chart(document.getElementById("dailyPnlChart"), {{
+        type: "line",
+        data: {{
+          labels: chartData.daily_labels,
+          datasets: [
+            {{ label: "일별 손익", data: chartData.daily_pnl, borderColor: accent, backgroundColor: "rgba(125, 211, 252, .18)", tension: .25 }},
+            {{ label: "누적 손익", data: chartData.daily_running_pnl, borderColor: good, backgroundColor: "rgba(56, 217, 150, .12)", tension: .25 }}
+          ]
+        }},
+        options: baseOptions()
+      }});
+    </script>
+    """
+
+
 def admin_table(strategies: list[dict[str, Any]]) -> str:
     rows = []
     for strategy in strategies:
@@ -240,6 +336,8 @@ def layout(title: str, body: str) -> bytes:
     h2 {{ margin:0 0 14px; font-size:18px; }}
     .sub {{ color:var(--muted); margin:0 0 18px; }}
     .cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }}
+    .chart-grid {{ display:grid; grid-template-columns:repeat(2,minmax(280px,1fr)); gap:14px; margin:18px 0 26px; }}
+    .chart-grid .wide {{ grid-column:1 / -1; }}
     .card {{ background:rgba(17,24,39,.88); border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 12px 40px rgba(0,0,0,.25); }}
     .metric-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }}
     .metric-grid div {{ background:#0b1220; border:1px solid #1f2937; border-radius:12px; padding:10px; }}
@@ -255,6 +353,7 @@ def layout(title: str, body: str) -> bytes:
     .good {{ color:var(--good); }}
     .bad {{ color:var(--bad); }}
     .section-title {{ margin-top:26px; }}
+    @media (max-width:760px) {{ .chart-grid {{ grid-template-columns:1fr; }} }}
   </style>
 </head>
 <body><main>
@@ -322,7 +421,9 @@ class Handler(BaseHTTPRequestHandler):
             + summary_cards("최근 활성/후보 전략", summarize(active_recent))
             + summary_cards("최근 전체 전략", summarize(recent))
             + "</div>"
-            "<h2 class='section-title'>전략별 최근 집계</h2>"
+            "<h2 class='section-title'>성과 차트</h2>"
+            + performance_charts(recent, strategies)
+            + "<h2 class='section-title'>전략별 최근 집계</h2>"
             + strategy_table(group_by_strategy(recent), strategies)
             + "<h2 class='section-title'>전략별 전체 누적 집계</h2>"
             + strategy_totals(ledger, strategies)
