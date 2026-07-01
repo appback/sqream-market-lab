@@ -1,4 +1,6 @@
 {
+  "runtime_mode": "config_only",
+  "runtime_policy": "Condition-set changes do not affect live runtime detection or paper trading until manually promoted and implemented in code after dry-run validation.",
   "condition_catalog": {
     "time_window": {
       "opening_0930_1015": "09:30~10:15 ET only",

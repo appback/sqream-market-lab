@@ -119,7 +119,9 @@ Admin page:
 
 This is currently a management/configuration layer.
 Runtime execution still uses explicit strategy logic.
-Before condition sets drive live runtime behavior, add validation and compare dry-run results against the current strategy code path.
+The current runtime mode is `config_only`.
+Changing condition sets must not change live detection or paper-trading decisions.
+Before condition sets drive live runtime behavior, add validation, compare dry-run results against the current strategy code path, and get explicit manual approval.
 
 ## Current D1거래량돌파 Interpretation
 

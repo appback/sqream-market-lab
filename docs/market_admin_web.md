@@ -79,3 +79,10 @@ Condition categories:
 
 This is currently an admin/config layer only. Runtime code still uses the existing strategy-specific logic.
 Before wiring condition sets into runtime execution, add validation and a dry-run comparison against current behavior.
+
+Runtime policy:
+
+- `runtime_mode`: `config_only`
+- condition-set changes do not affect live runtime detection,
+- condition-set changes do not affect paper-trading decisions,
+- promotion to runtime requires manual approval, dry-run validation, and explicit code change.

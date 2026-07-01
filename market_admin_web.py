@@ -540,6 +540,11 @@ class Handler(BaseHTTPRequestHandler):
                 "Condition Sets",
                 f"<h1>Condition Sets</h1>"
                 f"<p class='sub'>시간대, 장세, 눌림/횡보/거래량/위험관리 조건을 조합해 전략을 관리합니다. 저장 대상: {esc(CONDITION_SET_PATH)}</p>"
+                "<section class='card'><h2>Runtime Policy</h2>"
+                f"<p><b>Mode:</b> <code>{esc(condition_config.get('runtime_mode'))}</code></p>"
+                f"<p class='sub'>{esc(condition_config.get('runtime_policy'))}</p>"
+                "<p class='bad'>이 화면에서 조건을 바꿔도 장중 감지/모의매매 로직에는 즉시 반영되지 않습니다. dry-run 검증 후 별도 코드 반영이 필요합니다.</p>"
+                "</section>"
                 + condition_sets_table(condition_config)
                 + "<h2 class='section-title'>조건 카탈로그</h2>"
                 + condition_catalog_html(condition_config),
