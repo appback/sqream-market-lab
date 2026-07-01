@@ -81,6 +81,27 @@ def active_strategy_names(strategies: list[dict[str, Any]]) -> set[str]:
     }
 
 
+def display_names_by_strategy(strategies: list[dict[str, Any]]) -> dict[str, str]:
+    result = {}
+    for row in strategies:
+        strategy_name = str(row.get("strategy_name") or "")
+        display_name = str(row.get("display_name") or "")
+        if strategy_name and display_name:
+            result[strategy_name] = display_name
+    return result
+
+
+def with_display_names(rows: list[dict[str, Any]], strategies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    display_by_name = display_names_by_strategy(strategies)
+    enriched = []
+    for row in rows:
+        item = dict(row)
+        name = str(item.get("strategy_name") or "")
+        item["display_name"] = display_by_name.get(name, name)
+        enriched.append(item)
+    return enriched
+
+
 def fmt_pct(value: float) -> str:
     sign = "+" if value > 0 else ""
     return f"{sign}{value:.2f}%"
@@ -110,6 +131,7 @@ def summary_cards(title: str, summary: dict[str, Any]) -> str:
 def strategy_table(rows: list[dict[str, Any]], strategies: list[dict[str, Any]]) -> str:
     version_by_name: dict[str, list[str]] = defaultdict(list)
     status_by_name: dict[str, list[str]] = defaultdict(list)
+    display_by_name = display_names_by_strategy(strategies)
     for strategy in strategies:
         name = str(strategy.get("strategy_name") or "")
         if not name:
@@ -121,9 +143,10 @@ def strategy_table(rows: list[dict[str, Any]], strategies: list[dict[str, Any]])
     for row in rows:
         cls = "good" if row["total_pnl"] > 0 else "bad" if row["total_pnl"] < 0 else ""
         name = row["strategy_name"]
+        display_name = display_by_name.get(name, name)
         body.append(
             "<tr>"
-            f"<td><code>{esc(name)}</code><small>{esc(', '.join(version_by_name.get(name, [])))}</small></td>"
+            f"<td><b>{esc(display_name)}</b><small><code>{esc(name)}</code></small><small>{esc(', '.join(version_by_name.get(name, [])))}</small></td>"
             f"<td>{esc(', '.join(status_by_name.get(name, [])))}</td>"
             f"<td>{row['trades']}</td>"
             f"<td>{row['wins']} / {row['losses']}</td>"
@@ -179,10 +202,11 @@ def admin_table(strategies: list[dict[str, Any]]) -> str:
         rows.append(
             "<tr>"
             f"<td><code>{esc(strategy.get('version'))}</code></td>"
+            f"<td><input name='display_name' value='{esc(strategy.get('display_name'))}' form='form-{esc(strategy.get('version'))}'></td>"
             f"<td><code>{esc(strategy.get('strategy_name'))}</code></td>"
             f"<td>{esc(strategy.get('type'))}</td>"
             "<td>"
-            "<form method='post' action='/admin/strategies/update' class='inline-form'>"
+            f"<form id='form-{esc(strategy.get('version'))}' method='post' action='/admin/strategies/update' class='inline-form'>"
             f"<input type='hidden' name='version' value='{esc(strategy.get('version'))}'>"
             f"<input name='status' value='{esc(strategy.get('status'))}'>"
             "</td><td>"
@@ -192,7 +216,7 @@ def admin_table(strategies: list[dict[str, Any]]) -> str:
             "</td></tr>"
         )
     return (
-        "<table><thead><tr><th>버전</th><th>전략명</th><th>타입</th><th>상태</th>"
+        "<table><thead><tr><th>버전</th><th>표시명</th><th>전략명</th><th>타입</th><th>상태</th>"
         "<th>판단/메모</th><th>관리</th></tr></thead><tbody>"
         + "\n".join(rows)
         + "</tbody></table>"
@@ -274,8 +298,8 @@ class Handler(BaseHTTPRequestHandler):
                     "days": days,
                     "all_recent": summarize(recent),
                     "active_recent": summarize(active_recent),
-                    "by_strategy_recent": group_by_strategy(recent),
-                    "by_strategy_all": group_by_strategy(ledger),
+                    "by_strategy_recent": with_display_names(group_by_strategy(recent), strategies),
+                    "by_strategy_all": with_display_names(group_by_strategy(ledger), strategies),
                     "active_strategy_names": sorted(active_names),
                 }
             )
@@ -317,11 +341,13 @@ class Handler(BaseHTTPRequestHandler):
         form = urllib.parse.parse_qs(body)
         version = (form.get("version") or [""])[0]
         status = (form.get("status") or [""])[0].strip()
+        display_name = (form.get("display_name") or [""])[0].strip()
         decision = (form.get("decision") or [""])[0].strip()
         strategies = read_strategies()
         updated = False
         for row in strategies:
             if row.get("version") == version:
+                row["display_name"] = display_name
                 row["status"] = status
                 row["decision"] = decision
                 updated = True

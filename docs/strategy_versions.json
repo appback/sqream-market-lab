@@ -5,7 +5,8 @@
     "type": "surge_pullback",
     "status": "active_paper",
     "rule_summary": "intraday +100% surge, enter 35% pullback, target +25%, stop -15%, EOD close",
-    "decision": "keep paper-only while collecting samples"
+    "decision": "keep paper-only while collecting samples",
+    "display_name": "급등눌림"
   },
   {
     "version": "d1_precursor_v1",
@@ -13,7 +14,8 @@
     "type": "precursor_breakout",
     "status": "superseded",
     "rule_summary": "prior-day volume >= 5x 20d average and abs return <= 10%, entry +2%, target +10%, stop -5%",
-    "decision": "superseded by d1_precursor_v1_1 after ledger showed edge concentrated in opening bucket"
+    "decision": "superseded by d1_precursor_v1_1 after ledger showed edge concentrated in opening bucket",
+    "display_name": "D1거래량돌파"
   },
   {
     "version": "d1_precursor_v1_1",
@@ -33,7 +35,8 @@
       "opening_avg_pnl_pct": 7.597530288956655,
       "example_win": "CTM 2026-06-16 +10.00pct target"
     },
-    "decision": "active paper only in opening bucket; collect more out-of-sample days"
+    "decision": "active paper only in opening bucket; collect more out-of-sample days",
+    "display_name": "D1거래량돌파"
   },
   {
     "version": "sideways_vwap_v1",
@@ -49,7 +52,8 @@
       "avg_pnl_pct": -0.7476401886500262,
       "total_pnl_pct": -807.4514037420283
     },
-    "decision": "disabled until stricter filter is found"
+    "decision": "disabled until stricter filter is found",
+    "display_name": "횡보VWAP"
   },
   {
     "version": "uptrend_breakout_v0_1",
@@ -65,7 +69,8 @@
       "avg_pnl_pct": 0.0907806557744153,
       "total_pnl_pct": 25.05546099373862
     },
-    "decision": "superseded by uptrend_breakout_v0_2"
+    "decision": "superseded by uptrend_breakout_v0_2",
+    "display_name": "상승돌파"
   },
   {
     "version": "uptrend_breakout_v0_2",
@@ -81,7 +86,8 @@
       "avg_pnl_pct": 0.3587436049139791,
       "total_pnl_pct": 17.937180245698954
     },
-    "decision": "best current candidate; keep lab-only until more days confirm"
+    "decision": "best current candidate; keep lab-only until more days confirm",
+    "display_name": "상승돌파"
   },
   {
     "version": "uptrend_high_hold_v0_1",
@@ -93,7 +99,8 @@
       "trades": 1167,
       "avg_pnl_pct": -0.43056745263402624
     },
-    "decision": "disabled"
+    "decision": "disabled",
+    "display_name": "상승고점유지"
   },
   {
     "version": "uptrend_vwap_pullback_v0_1",
@@ -105,7 +112,8 @@
       "trades": 452,
       "avg_pnl_pct": -0.8558647806831474
     },
-    "decision": "disabled"
+    "decision": "disabled",
+    "display_name": "상승눌림"
   },
   {
     "version": "mr_lower10_v0_1",
@@ -117,6 +125,7 @@
       "trades": 634,
       "avg_pnl_pct": -0.7477938609054461
     },
-    "decision": "disabled"
+    "decision": "disabled",
+    "display_name": "하단반등"
   }
 ]
