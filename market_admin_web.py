@@ -141,6 +141,12 @@ def strategy_table(rows: list[dict[str, Any]], strategies: list[dict[str, Any]])
     )
 
 
+def strategy_totals(rows: list[dict[str, Any]], strategies: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<p class='sub'>전략별 거래 데이터가 없습니다.</p>"
+    return strategy_table(group_by_strategy(rows), strategies)
+
+
 def trades_table(rows: list[dict[str, Any]], limit: int = 30) -> str:
     body = []
     for row in sorted(rows, key=lambda x: str(x.get("closed_at") or ""), reverse=True)[:limit]:
@@ -268,7 +274,8 @@ class Handler(BaseHTTPRequestHandler):
                     "days": days,
                     "all_recent": summarize(recent),
                     "active_recent": summarize(active_recent),
-                    "by_strategy": group_by_strategy(recent),
+                    "by_strategy_recent": group_by_strategy(recent),
+                    "by_strategy_all": group_by_strategy(ledger),
                     "active_strategy_names": sorted(active_names),
                 }
             )
@@ -293,6 +300,8 @@ class Handler(BaseHTTPRequestHandler):
             + "</div>"
             "<h2 class='section-title'>전략별 최근 집계</h2>"
             + strategy_table(group_by_strategy(recent), strategies)
+            + "<h2 class='section-title'>전략별 전체 누적 집계</h2>"
+            + strategy_totals(ledger, strategies)
             + "<h2 class='section-title'>최근 거래 상세</h2>"
             + trades_table(recent)
         )
